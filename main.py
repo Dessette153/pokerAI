@@ -27,6 +27,7 @@ def cmd_sim(args):
     from app.agents.ai_v1 import AIv1
     from app.agents.simple_agent import SimpleAgent
     from app.agents.random_agent import RandomAgent
+    from app.agents.allin_agent import AllInAgent
     from app.opponent_model.tracker import StatsTracker
     from app.logging.hand_logger import HandLogger
     from app.sim.simulator import SessionSimulator, simulate_hand
@@ -38,7 +39,12 @@ def cmd_sim(args):
 
     engine = GameEngine(cfg.SB, cfg.BB)
     ai = AIv1('AI v1', seat=0)
-    opp = RandomAgent('Random') if args.opponent == 'random' else SimpleAgent('Simple')
+    if args.opponent == 'random':
+        opp = RandomAgent('Random')
+    elif args.opponent == 'allin':
+        opp = AllInAgent('All-In')
+    else:
+        opp = SimpleAgent('Simple')
     agents = [ai, opp]
 
     tracker = StatsTracker()
@@ -275,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim = sub.add_parser('sim', help='Batch headless simülasyon')
     p_sim.add_argument('--hands', type=int, default=1000, metavar='N',
                        help='Simüle edilecek el sayısı (default: 1000)')
-    p_sim.add_argument('--opponent', choices=['simple', 'random'], default='simple',
+    p_sim.add_argument('--opponent', choices=['simple', 'random', 'allin'], default='simple',
                        help='Rakip ajan tipi (default: simple)')
     p_sim.add_argument('--no-log', action='store_true',
                        help='JSONL log dosyası yazma')

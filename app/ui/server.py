@@ -23,6 +23,7 @@ from app.engine.state import StreetSnapshot
 from app.agents.ai_v1 import AIv1
 from app.agents.simple_agent import SimpleAgent
 from app.agents.random_agent import RandomAgent
+from app.agents.allin_agent import AllInAgent
 from app.opponent_model.tracker import StatsTracker
 from app.logging.hand_logger import HandLogger
 from app.sim.simulator import SessionSimulator, SimEvent
@@ -225,6 +226,8 @@ def on_start_sim(data=None):
 
     if opponent_type == 'random':
         opp_agent = RandomAgent(name='Random')
+    elif opponent_type == 'allin':
+        opp_agent = AllInAgent(name='All-In')
     else:
         opp_agent = SimpleAgent(name='Simple')
 
