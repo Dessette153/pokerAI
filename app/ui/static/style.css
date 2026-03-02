@@ -1,0 +1,317 @@
+/* style.css - Poker AI Simulator */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --table-felt: #2d5a27;
+  --table-border: #8B4513;
+  --table-border2: #D2691E;
+  --card-bg: #fff;
+  --card-red: #cc0000;
+  --card-black: #111;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --green: #28a745;
+  --red: #dc3545;
+  --blue: #0d6efd;
+  --gold: #ffd700;
+  --pot-color: #ffd700;
+  --chip-color: #e63946;
+  --radius: 8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- Header ---- */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  gap: 12px;
+}
+.logo { font-size: 1.1rem; font-weight: 700; color: var(--gold); letter-spacing: 1px; }
+.header-center { display: flex; align-items: center; gap: 14px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.checkbox-label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.82rem; color: var(--text-dim); cursor: pointer;
+  user-select: none; white-space: nowrap;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 14px; height: 14px; accent-color: var(--green); cursor: pointer;
+}
+.speed-control {
+  display: flex; align-items: center; gap: 5px;
+  border: 1px solid #444; border-radius: var(--radius);
+  padding: 3px 8px; background: var(--surface2);
+}
+.speed-label { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; }
+.speed-val { font-size: 0.82rem; font-weight: 700; color: var(--gold); min-width: 28px; }
+#speed-slider {
+  width: 90px; height: 4px; cursor: pointer; accent-color: var(--green);
+}
+#hand-counter { font-size: 0.95rem; color: var(--text-dim); }
+#sim-status { font-size: 0.85rem; font-weight: 600; padding: 3px 8px; border-radius: 12px; }
+.status-idle     { color: #888; background: #222; }
+.status-running  { color: #2ecc71; background: #1a3a2a; animation: pulse 2s infinite; }
+.status-paused   { color: #f39c12; background: #3a2a10; }
+.status-stopped  { color: var(--red); background: #2a1010; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+select#opponent-select {
+  background: var(--surface2); color: var(--text); border: 1px solid #444;
+  padding: 5px 10px; border-radius: var(--radius); cursor: pointer;
+}
+
+/* ---- Buttons ---- */
+.btn {
+  padding: 6px 14px; border: none; border-radius: var(--radius); cursor: pointer;
+  font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-green  { background: var(--green); color: #fff; }
+.btn-green:hover:not(:disabled) { background: #1e7e34; }
+.btn-red    { background: var(--red); color: #fff; }
+.btn-red:hover:not(:disabled) { background: #b02a37; }
+.btn-blue   { background: var(--blue); color: #fff; }
+.btn-blue:hover:not(:disabled) { background: #0a58ca; }
+.btn-street {
+  background: var(--surface2); color: var(--text); padding: 5px 12px;
+  border: 1px solid #555; border-radius: 4px; font-size: 0.8rem;
+}
+.btn-street:hover { background: #1a4a7a; border-color: #77aaff; }
+.btn-street.active { background: #1a4a7a; border-color: var(--gold); color: var(--gold); }
+
+/* ---- Main Layout ---- */
+.main-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 260px;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+/* ---- Stats Panel (left) ---- */
+.stats-panel {
+  background: var(--surface);
+  padding: 12px;
+  overflow-y: auto;
+  border-right: 1px solid #333;
+  font-size: 0.82rem;
+}
+.stats-panel h3 { color: var(--gold); margin-bottom: 10px; font-size: 0.95rem; text-transform: uppercase; }
+.stats-panel h4 { color: #aab; font-size: 0.8rem; margin: 6px 0 4px; text-transform: uppercase; }
+.stat-section { }
+.stat-divider { height: 1px; background: #333; margin: 10px 0; }
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 4px; border-radius: 4px;
+}
+.stat-row:hover { background: #1e2a3a; }
+.stat-row.highlight { color: var(--gold); font-weight: 600; }
+.stat-row span:last-child { font-weight: 600; color: #ccc; }
+.ai-decision { background: #0d1a2a; border-radius: 6px; padding: 8px; margin-top: 4px; }
+.ai-reasoning {
+  margin-top: 6px; font-size: 0.75rem; color: #89b4fa;
+  border-top: 1px solid #2a3a4a; padding-top: 6px; word-break: break-word;
+}
+
+/* ---- Poker Table (center) ---- */
+.table-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  gap: 12px;
+  background: #141428;
+}
+
+.poker-table {
+  width: 100%;
+  max-width: 650px;
+  min-height: 380px;
+  background: var(--table-felt);
+  border-radius: 50%;
+  border: 10px solid var(--table-border);
+  outline: 4px solid var(--table-border2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 40px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7), inset 0 2px 10px rgba(0,0,0,0.3);
+}
+
+/* ---- Player Areas ---- */
+.player-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+.player-top { flex-direction: column; }
+.player-bottom { flex-direction: column-reverse; }
+
+.player-info {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,0.5); border-radius: 20px; padding: 4px 12px;
+}
+.player-name { font-size: 0.85rem; font-weight: 600; color: #ddd; }
+.player-stack { font-size: 0.9rem; font-weight: 700; color: var(--gold); }
+.dealer-btn {
+  background: var(--gold); color: #000; font-size: 0.65rem;
+  font-weight: 800; padding: 1px 5px; border-radius: 8px;
+}
+
+/* Actor highlight */
+.player-area.acting { }
+.player-area.acting .player-info {
+  background: rgba(30, 80, 160, 0.75);
+  box-shadow: 0 0 12px rgba(100,160,255,0.6);
+}
+
+/* ---- Cards ---- */
+.hole-cards { display: flex; gap: 6px; }
+
+.card {
+  width: 48px; height: 68px;
+  border-radius: 6px; border: 2px solid #ccc;
+  background: var(--card-bg); color: var(--card-black);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; font-weight: 800; line-height: 1;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+  transition: transform 0.15s;
+  flex-direction: column; gap: 0;
+  overflow: hidden;
+  user-select: none;
+}
+.card .rank { font-size: 1rem; }
+.card .suit { font-size: 0.95rem; }
+.card.red-card { color: var(--card-red); }
+.card.face-down {
+  background: linear-gradient(135deg, #1a3a6a 25%, #0d2040 100%);
+  color: #4a7ab5; font-size: 1.4rem; border-color: #3a6aaa;
+}
+.card.winner-card { border-color: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.card-placeholder {
+  width: 48px; height: 68px; border-radius: 6px;
+  border: 2px dashed #4a7a4a; background: rgba(0,0,0,0.2);
+  display: flex; align-items: center; justify-content: center;
+  color: #4a7a4a; font-size: 1.2rem;
+}
+
+.community-cards { display: flex; gap: 8px; align-items: center; }
+
+/* ---- Board / Pot ---- */
+.board-area {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.pot-display {
+  background: rgba(0,0,0,0.45); border-radius: 20px; padding: 4px 20px;
+  display: flex; gap: 8px; align-items: center;
+}
+.pot-label { font-size: 0.75rem; color: #8ca; text-transform: uppercase; }
+.pot-amount { font-size: 1.1rem; font-weight: 800; color: var(--gold); }
+
+/* ---- Action Badge ---- */
+.action-badge {
+  min-height: 22px; min-width: 60px; text-align: center;
+  font-size: 0.75rem; font-weight: 700; padding: 3px 10px;
+  border-radius: 12px; transition: all 0.2s;
+}
+.badge-fold  { background: #6d1010; color: #ff8a8a; }
+.badge-check { background: #1a3a1a; color: #6dff6d; }
+.badge-call  { background: #1a2a4a; color: #6ab4ff; }
+.badge-bet   { background: #3a2a00; color: #ffc940; }
+.badge-raise { background: #3a0a30; color: #ff80e0; }
+
+/* ---- Bet Display ---- */
+.bet-display {
+  min-height: 20px; font-size: 0.78rem; font-weight: 700;
+  color: var(--chip-color); text-align: center;
+}
+
+/* ---- Controls Bar ---- */
+.controls-bar {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 8px 0; flex-wrap: wrap; min-height: 48px;
+}
+.street-nav { display: flex; gap: 6px; }
+.pause-controls { display: flex; gap: 8px; }
+
+/* ---- Log Panel (right) ---- */
+.log-panel {
+  background: var(--surface); padding: 12px;
+  overflow: hidden; border-left: 1px solid #333;
+  display: flex; flex-direction: column;
+}
+.log-panel h3 { color: var(--gold); margin-bottom: 8px; font-size: 0.95rem; text-transform: uppercase; flex-shrink: 0; }
+.action-log {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;
+  font-size: 0.78rem;
+}
+.log-entry {
+  padding: 4px 8px; border-radius: 4px; border-left: 3px solid #444; line-height: 1.4;
+}
+.log-info      { border-color: #555; color: #aaa; }
+.log-hand      { border-color: var(--gold); color: var(--gold); background: #1a1400; font-weight: 600; }
+.log-street    { border-color: #4a7a4a; color: #8aca8a; background: #0a140a; }
+.log-fold      { border-color: #6d1010; color: #ff8a8a; }
+.log-check     { border-color: #1a4a1a; color: #6dff6d; }
+.log-call      { border-color: #1a2a5a; color: #6ab4ff; }
+.log-bet       { border-color: #5a3a00; color: #ffc940; }
+.log-raise     { border-color: #5a0a4a; color: #ff80e0; }
+.log-showdown  { border-color: #fff; color: #fff; background: #1a1a2a; font-weight: 700; }
+.log-winner    { border-color: var(--gold); color: var(--gold); font-weight: 700; }
+
+/* ---- Overlay ---- */
+.overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); display: flex;
+  align-items: center; justify-content: center; z-index: 100;
+}
+.overlay-content {
+  background: var(--surface); border: 2px solid var(--gold);
+  border-radius: 12px; padding: 24px 36px; text-align: center;
+  min-width: 280px; box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+}
+.overlay-title { font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 8px; }
+.overlay-detail { font-size: 1rem; color: #ccc; }
+
+/* ---- To-Act Indicator ---- */
+.to-act-indicator {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: 42%; font-size: 0.75rem; color: rgba(255,255,255,0.3);
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .main-layout { grid-template-columns: 180px 1fr 200px; }
+}
+@media (max-width: 768px) {
+  .main-layout { grid-template-columns: 1fr; }
+  .stats-panel, .log-panel { display: none; }
+}

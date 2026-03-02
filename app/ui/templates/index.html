@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker AI Simulator</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <span class="logo">♠ Poker AI Simulator</span>
+    </div>
+    <div class="header-center">
+      <span id="hand-counter">Hand #0</span>
+      <span id="sim-status" class="status-idle">● IDLE</span>
+    </div>
+    <div class="header-right">
+      <select id="opponent-select">
+        <option value="simple">Opponent: Simple</option>
+        <option value="random">Opponent: Random</option>
+      </select>
+      <label class="checkbox-label" title="Showdown'larda simülasyonu durdur">
+        <input type="checkbox" id="chk-pause" checked>
+        Showdown'da duraklat
+      </label>
+      <div class="speed-control" title="Aksiyon hızı">
+        <span class="speed-label">Hız:</span>
+        <input type="range" id="speed-slider" min="1" max="20" value="3" step="1">
+        <span id="speed-display" class="speed-val">3x</span>
+      </div>
+      <button id="btn-start" class="btn btn-green">▶ Start</button>
+      <button id="btn-stop" class="btn btn-red" disabled>■ Stop</button>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <!-- Left: Stats Panel -->
+    <aside class="stats-panel">
+      <h3>Statistics</h3>
+      <div class="stat-section">
+        <h4 id="stats-p0-name">AI v1</h4>
+        <div class="stat-row"><span>Hands</span><span id="s0-hands">0</span></div>
+        <div class="stat-row"><span>Win%</span><span id="s0-win">0%</span></div>
+        <div class="stat-row"><span>VPIP</span><span id="s0-vpip">0%</span></div>
+        <div class="stat-row"><span>PFR</span><span id="s0-pfr">0%</span></div>
+        <div class="stat-row"><span>AF</span><span id="s0-af">0.0</span></div>
+        <div class="stat-row highlight"><span>bb/100</span><span id="s0-bb100">0.0</span></div>
+        <div class="stat-row"><span>Net Chips</span><span id="s0-net">0</span></div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-section">
+        <h4 id="stats-p1-name">Opponent</h4>
+        <div class="stat-row"><span>Hands</span><span id="s1-hands">0</span></div>
+        <div class="stat-row"><span>Win%</span><span id="s1-win">0%</span></div>
+        <div class="stat-row"><span>VPIP</span><span id="s1-vpip">0%</span></div>
+        <div class="stat-row"><span>PFR</span><span id="s1-pfr">0%</span></div>
+        <div class="stat-row"><span>AF</span><span id="s1-af">0.0</span></div>
+        <div class="stat-row highlight"><span>bb/100</span><span id="s1-bb100">0.0</span></div>
+        <div class="stat-row"><span>Net Chips</span><span id="s1-net">0</span></div>
+      </div>
+
+      <div class="stat-divider"></div>
+      <div class="stat-section">
+        <h4>Current Hand Info</h4>
+        <div class="stat-row"><span>Street</span><span id="cur-street">-</span></div>
+        <div class="stat-row"><span>Pot</span><span id="cur-pot">0</span></div>
+        <div class="stat-row"><span>To Call</span><span id="cur-tocall">0</span></div>
+      </div>
+
+      <!-- AI Decision Info -->
+      <div class="stat-divider"></div>
+      <div class="stat-section">
+        <h4>Last AI Decision</h4>
+        <div id="ai-decision-box" class="ai-decision">
+          <div class="stat-row"><span>Action</span><span id="ai-action">-</span></div>
+          <div class="stat-row"><span>Equity</span><span id="ai-equity">-</span></div>
+          <div class="stat-row"><span>Pot Odds</span><span id="ai-potodds">-</span></div>
+          <div class="stat-row"><span>Tier</span><span id="ai-tier">-</span></div>
+          <div id="ai-reasoning" class="ai-reasoning">-</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: Poker Table -->
+    <main class="table-container">
+      <div class="poker-table">
+        <!-- Opponent (Player 1 - top) -->
+        <div class="player-area player-top" id="player1-area">
+          <div class="player-info">
+            <span id="p1-name" class="player-name">Opponent</span>
+            <span id="p1-stack" class="player-stack">10,000</span>
+            <span id="p1-dealer" class="dealer-btn" style="display:none">BTN</span>
+          </div>
+          <div class="hole-cards" id="p1-cards">
+            <div class="card face-down">?</div>
+            <div class="card face-down">?</div>
+          </div>
+          <div id="p1-action-badge" class="action-badge"></div>
+          <div id="p1-bet-display" class="bet-display"></div>
+        </div>
+
+        <!-- Board area -->
+        <div class="board-area">
+          <div class="community-cards" id="board-cards">
+            <div class="card-placeholder">-</div>
+            <div class="card-placeholder">-</div>
+            <div class="card-placeholder">-</div>
+            <div class="card-placeholder">-</div>
+            <div class="card-placeholder">-</div>
+          </div>
+          <div class="pot-display">
+            <span class="pot-label">POT</span>
+            <span id="pot-amount" class="pot-amount">0</span>
+          </div>
+        </div>
+
+        <!-- AI v1 (Player 0 - bottom) -->
+        <div class="player-area player-bottom" id="player0-area">
+          <div id="p0-bet-display" class="bet-display"></div>
+          <div id="p0-action-badge" class="action-badge"></div>
+          <div class="hole-cards" id="p0-cards">
+            <div class="card face-down">?</div>
+            <div class="card face-down">?</div>
+          </div>
+          <div class="player-info">
+            <span id="p0-dealer" class="dealer-btn" style="display:none">BTN</span>
+            <span id="p0-name" class="player-name">AI v1</span>
+            <span id="p0-stack" class="player-stack">10,000</span>
+          </div>
+        </div>
+
+        <!-- To-act indicator -->
+        <div id="to-act-indicator" class="to-act-indicator"></div>
+      </div>
+
+      <!-- Controls bar -->
+      <div class="controls-bar">
+        <!-- Street navigation (shown when paused) -->
+        <div id="street-nav" class="street-nav" style="display:none">
+          <button class="btn btn-street" data-street="PREFLOP" onclick="revertToStreet('PREFLOP')">PREFLOP</button>
+          <button class="btn btn-street" data-street="FLOP" onclick="revertToStreet('FLOP')">FLOP</button>
+          <button class="btn btn-street" data-street="TURN" onclick="revertToStreet('TURN')">TURN</button>
+          <button class="btn btn-street" data-street="RIVER" onclick="revertToStreet('RIVER')">RIVER</button>
+        </div>
+        <!-- Resume buttons (shown when paused) -->
+        <div id="pause-controls" class="pause-controls" style="display:none">
+          <button class="btn btn-green" onclick="resumeSim()">▶ Resume</button>
+          <button class="btn btn-blue" onclick="nextHand()">▶▶ Next Hand</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right: Action Log -->
+    <aside class="log-panel">
+      <h3>Action Log</h3>
+      <div id="action-log" class="action-log">
+        <div class="log-entry log-info">Waiting to start...</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Showdown overlay (briefly shows winner) -->
+  <div id="showdown-overlay" class="overlay" style="display:none">
+    <div class="overlay-content">
+      <div id="overlay-title" class="overlay-title"></div>
+      <div id="overlay-detail" class="overlay-detail"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
