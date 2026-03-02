@@ -34,9 +34,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Temp files (Claude agent artifacts)
-tmpclaude-*/
-
 # pytest
 .pytest_cache/
 .coverage
