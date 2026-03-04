@@ -100,7 +100,7 @@ function clearLog() {
 }
 
 function actionTypeClass(type) {
-  const m = {fold:'fold', check:'check', call:'call', bet:'bet', raise:'raise'};
+  const m = {fold:'fold', check:'check', call:'call', bet:'bet', raise:'raise', all_in:'all_in'};
   return m[type] || 'info';
 }
 
@@ -195,8 +195,8 @@ function updateAIDecision(action) {
   const type = action.type;
   const amount = action.amount;
 
-  $('ai-action').textContent = type.toUpperCase() + (amount > 0 ? ` ${fmt(amount)}` : '');
-  $('ai-action').style.color = {fold:'#ff8a8a',check:'#6dff6d',call:'#6ab4ff',bet:'#ffc940',raise:'#ff80e0'}[type] || '#ccc';
+  $('ai-action').textContent = type.toUpperCase().replace('_', ' ') + (amount > 0 ? ` ${fmt(amount)}` : '');
+  $('ai-action').style.color = {fold:'#ff8a8a',check:'#6dff6d',call:'#6ab4ff',bet:'#ffc940',raise:'#ff80e0',all_in:'#ff6600'}[type] || '#ccc';
   $('ai-equity').textContent = expl.equity !== undefined ? `${(expl.equity * 100).toFixed(1)}%` : '-';
   $('ai-potodds').textContent = expl.pot_odds !== undefined ? `${(expl.pot_odds * 100).toFixed(1)}%` : '-';
   $('ai-tier').textContent   = expl.tier || '-';

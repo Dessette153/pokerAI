@@ -237,11 +237,12 @@ select#opponent-select {
   font-size: 0.75rem; font-weight: 700; padding: 3px 10px;
   border-radius: 12px; transition: all 0.2s;
 }
-.badge-fold  { background: #6d1010; color: #ff8a8a; }
-.badge-check { background: #1a3a1a; color: #6dff6d; }
-.badge-call  { background: #1a2a4a; color: #6ab4ff; }
-.badge-bet   { background: #3a2a00; color: #ffc940; }
-.badge-raise { background: #3a0a30; color: #ff80e0; }
+.badge-fold    { background: #6d1010; color: #ff8a8a; }
+.badge-check   { background: #1a3a1a; color: #6dff6d; }
+.badge-call    { background: #1a2a4a; color: #6ab4ff; }
+.badge-bet     { background: #3a2a00; color: #ffc940; }
+.badge-raise   { background: #3a0a30; color: #ff80e0; }
+.badge-all_in  { background: #5a2200; color: #ff6600; }
 
 /* ---- Bet Display ---- */
 .bet-display {

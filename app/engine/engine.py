@@ -117,6 +117,16 @@ class GameEngine:
             s.total_invested[player] += call_amount
             if s.stacks[player] == 0:
                 s.all_in[player] = True
+                # Heads-up all-in for less: return uncalled excess to opponent.
+                # Opponent over-bet more than this player could match, so their
+                # extra chips are not eligible for the pot and must be refunded.
+                uncalled = s.to_call - call_amount
+                if uncalled > 0:
+                    s.stacks[opponent] += uncalled
+                    s.pot -= uncalled
+                    s.street_invested[opponent] -= uncalled
+                    s.total_invested[opponent] -= uncalled
+                    action_dict['uncalled_returned'] = uncalled
             s.voluntary_acted[player] = True
             action_dict['amount'] = call_amount
 
@@ -146,6 +156,41 @@ class GameEngine:
 
             action_dict['amount'] = total_put
             action_dict['raise_size'] = actual_raise
+
+        elif action.type == ActionType.ALL_IN:
+            # Player commits their entire remaining stack.
+            # This is either a raise-all-in (if more than to_call) or
+            # a call-all-in for less (if less than to_call).
+            all_in_amount = s.stacks[player]
+            s.stacks[player] = 0
+            s.pot += all_in_amount
+            s.street_invested[player] += all_in_amount
+            s.total_invested[player] += all_in_amount
+            s.all_in[player] = True
+
+            # net_to_call: how much opponent must still put in after this
+            net_to_call = s.street_invested[player] - s.street_invested[opponent]
+            if net_to_call > 0:
+                # Raise-all-in: opponent must respond
+                s.to_call = net_to_call
+                s.last_raise = all_in_amount
+                s.min_raise = all_in_amount
+                s.voluntary_acted[player] = True
+                s.voluntary_acted[opponent] = False
+            else:
+                # Call-all-in for less: return the uncalled portion to opponent
+                uncalled = -net_to_call  # = opponent_invested - player_invested
+                if uncalled > 0:
+                    s.stacks[opponent] += uncalled
+                    s.pot -= uncalled
+                    s.street_invested[opponent] -= uncalled
+                    s.total_invested[opponent] -= uncalled
+                    action_dict['uncalled_returned'] = uncalled
+                s.to_call = 0
+                s.voluntary_acted[player] = True
+
+            action_dict['amount'] = all_in_amount
+            action_dict['all_in'] = True
 
         action_dict['pot_after'] = s.pot
         action_dict['stacks_after'] = list(s.stacks)
@@ -177,6 +222,20 @@ class GameEngine:
                 s = self._start_next_street(s, deck)
             else:
                 s.to_act = opponent
+        elif action.type == ActionType.ALL_IN:
+            if s.to_call > 0:
+                # Raised all-in — opponent must respond
+                if s.all_in[player] and s.all_in[opponent]:
+                    s = self._start_next_street(s, deck)
+                else:
+                    s.to_act = opponent
+            else:
+                # Called all-in (exact or for less) — treat like a call
+                if s.voluntary_acted[0] and s.voluntary_acted[1]:
+                    s = self._start_next_street(s, deck)
+                else:
+                    s.to_call = max(0.0, s.street_invested[player] - s.street_invested[opponent])
+                    s.to_act = opponent
 
         return s
 

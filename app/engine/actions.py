@@ -16,6 +16,7 @@ class ActionType(Enum):
     CALL = "call"
     BET = "bet"
     RAISE = "raise"
+    ALL_IN = "all_in"
 
 
 @dataclass
@@ -56,12 +57,18 @@ def legal_actions(state: 'GameState') -> List[ActionType]:
         # Can raise if player has chips beyond the call
         if stack > to_call and not all(state.all_in):
             actions.append(ActionType.RAISE)
+        # Can always go all-in if not already all-in
+        if stack > 0 and not state.all_in[player]:
+            actions.append(ActionType.ALL_IN)
     else:
         # No bet to face
         actions.append(ActionType.CHECK)
         # Can bet if has chips
         if stack > 0 and not all(state.all_in):
             actions.append(ActionType.BET)
+        # Can always go all-in if not already all-in
+        if stack > 0 and not state.all_in[player]:
+            actions.append(ActionType.ALL_IN)
 
     return actions
 

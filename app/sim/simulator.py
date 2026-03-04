@@ -85,6 +85,18 @@ def simulate_hand(
         # Apply action to engine
         state = engine.apply_action(state, action, deck)
 
+        # Sync processed amount back to action_record (engine may cap/adjust it,
+        # e.g. for ALL_IN the actual amount is the player's stack, not Action.amount)
+        if state.action_history:
+            last = state.action_history[-1]
+            processed_amount = last.get('amount', action_record['amount'])
+            if processed_amount != 0 or action.type.value == 'all_in':
+                action_record['amount'] = processed_amount
+            if last.get('uncalled_returned'):
+                action_record['uncalled_returned'] = last['uncalled_returned']
+            if last.get('all_in'):
+                action_record['all_in'] = True
+
         action_record['pot_after'] = state.pot
         action_record['stacks_after'] = list(state.stacks)
         current_snap.actions.append(action_record)
@@ -175,11 +187,13 @@ class SessionSimulator:
         agents: List[BaseAgent],
         starting_stacks: Optional[List[float]] = None,
         rebuy_to: Optional[float] = None,
+        rebuy_both: bool = True,
     ):
         self.engine = engine
         self.agents = agents
         self.stacks = starting_stacks or [10_000.0, 10_000.0]
         self.rebuy_to = rebuy_to  # rebuy short stacks to this amount (or None)
+        self.rebuy_both = rebuy_both  # if True, reset BOTH players on rebuy (conserves chips)
         self.button = 0
         self.hand_id = 1
         self.results: List[HandResult] = []
@@ -190,9 +204,15 @@ class SessionSimulator:
 
         # Rebuy if needed
         if self.rebuy_to:
-            for i in range(2):
-                if stacks[i] < self.engine.bb * 10:
-                    stacks[i] = self.rebuy_to
+            if self.rebuy_both:
+                # If any player is short, reset BOTH to starting stack.
+                # This preserves chip conservation - no free chips are created.
+                if any(s < self.engine.bb * 10 for s in stacks):
+                    stacks = [self.rebuy_to, self.rebuy_to]
+            else:
+                for i in range(2):
+                    if stacks[i] < self.engine.bb * 10:
+                        stacks[i] = self.rebuy_to
 
         gen = simulate_hand(
             self.engine, self.agents, self.hand_id, stacks, self.button

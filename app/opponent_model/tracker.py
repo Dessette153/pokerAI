@@ -115,17 +115,17 @@ class StatsTracker:
                     stats.pfr_opportunities += 1
                     preflop_seen[player] = True
 
-                if action_type in ('call', 'raise', 'bet'):
+                if action_type in ('call', 'raise', 'bet', 'all_in'):
                     if not hasattr(stats, f'_vpip_done_{hand_result.hand_id}_{player}'):
                         setattr(stats, f'_vpip_done_{hand_result.hand_id}_{player}', True)
                         stats.vpip_count += 1
-                if action_type in ('raise', 'bet'):
+                if action_type in ('raise', 'bet', 'all_in'):
                     if not hasattr(stats, f'_pfr_done_{hand_result.hand_id}_{player}'):
                         setattr(stats, f'_pfr_done_{hand_result.hand_id}_{player}', True)
                         stats.pfr_count += 1
 
             # AF tracking (all streets)
-            if action_type in ('bet', 'raise'):
+            if action_type in ('bet', 'raise', 'all_in'):
                 stats.total_bets_raises += 1
             elif action_type == 'call':
                 stats.total_calls += 1

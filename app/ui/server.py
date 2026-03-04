@@ -239,6 +239,7 @@ def on_start_sim(data=None):
         agents=agents,
         starting_stacks=[cfg.STARTING_STACK, cfg.STARTING_STACK],
         rebuy_to=cfg.STARTING_STACK,
+        rebuy_both=True,
     )
 
     sim_state.simulator = simulator

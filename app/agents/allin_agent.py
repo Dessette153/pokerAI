@@ -22,23 +22,17 @@ class AllInAgent(BaseAgent):
     def select_action(self, state: GameState) -> Tuple[Action, Dict]:
         actions = legal_actions(state)
         player = state.to_act
+
+        # Always go all-in if possible
         stack = state.stacks[player]
+        if ActionType.ALL_IN in actions:
+            action = Action(type=ActionType.ALL_IN, amount=stack, player=player)
+            return action, {'reasoning': 'allin_shove'}
 
-        if state.to_call > 0:
-            # Facing a bet: raise all-in if possible
-            if ActionType.RAISE in actions:
-                shove = stack - state.to_call
-                shove = max(shove, state.min_raise)
-                action = Action(type=ActionType.RAISE, amount=shove, player=player)
-                return action, {'reasoning': 'allin_shove'}
-            # Can't raise (not enough chips): call
-            action = Action(type=ActionType.CALL, amount=state.to_call, player=player)
+        # Fallback: call or check (e.g. already all-in, just need to check/call)
+        if ActionType.CALL in actions:
+            action = Action(type=ActionType.CALL, player=player)
             return action, {'reasoning': 'allin_call'}
-
-        # No bet: bet entire stack
-        if ActionType.BET in actions:
-            action = Action(type=ActionType.BET, amount=stack, player=player)
-            return action, {'reasoning': 'allin_bet'}
 
         action = Action(type=ActionType.CHECK, amount=0.0, player=player)
         return action, {'reasoning': 'allin_check'}

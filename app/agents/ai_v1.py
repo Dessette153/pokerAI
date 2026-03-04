@@ -90,6 +90,19 @@ class AIv1(BaseAgent):
         super().__init__(name)
         self.seat = seat  # Which seat this agent occupies
 
+    @staticmethod
+    def _as_aggressive(
+        action_type: ActionType, amount: float,
+        stack: float, to_call: float,
+        player: int, actions: List[ActionType]
+    ) -> Action:
+        """Return a RAISE/BET action, upgrading to ALL_IN when the total
+        would consume the player's entire remaining stack."""
+        total = amount + (to_call if action_type == ActionType.RAISE else 0.0)
+        if total >= stack - 0.01 and ActionType.ALL_IN in actions:
+            return Action(ActionType.ALL_IN, amount=stack, player=player)
+        return Action(action_type, amount, player)
+
     def select_action(self, state: GameState) -> Tuple[Action, Dict]:
         player = state.to_act
         actions = legal_actions(state)
@@ -132,7 +145,7 @@ class AIv1(BaseAgent):
                 raise_size = max(raise_size, state.min_raise)
                 if ActionType.RAISE in actions and raise_size > 0 and state.stacks[player] > state.to_call:
                     expl['reasoning'] = f'Tier S: 3-bet x{mult}'
-                    return Action(ActionType.RAISE, raise_size, player), expl
+                    return self._as_aggressive(ActionType.RAISE, raise_size, state.stacks[player], state.to_call, player, actions), expl
                 else:
                     expl['reasoning'] = 'Tier S: call (no raise option)'
                     return Action(ActionType.CALL, state.to_call, player), expl
@@ -145,7 +158,7 @@ class AIv1(BaseAgent):
                     raise_size = min(raise_size, state.stacks[player] - state.to_call)
                     raise_size = max(raise_size, state.min_raise)
                     expl['reasoning'] = 'Tier A: 3-bet (25% freq)'
-                    return Action(ActionType.RAISE, raise_size, player), expl
+                    return self._as_aggressive(ActionType.RAISE, raise_size, state.stacks[player], state.to_call, player, actions), expl
                 expl['reasoning'] = 'Tier A: call'
                 return Action(ActionType.CALL, state.to_call, player), expl
 
@@ -171,10 +184,10 @@ class AIv1(BaseAgent):
         if tier in ('S', 'A'):
             if ActionType.RAISE in actions and state.stacks[player] > open_size:
                 expl['reasoning'] = f'Tier {tier}: open raise {config.OPEN_SIZE_BB}bb'
-                return Action(ActionType.RAISE, open_size, player), expl
+                return self._as_aggressive(ActionType.RAISE, open_size, state.stacks[player], state.to_call, player, actions), expl
             elif ActionType.BET in actions and state.stacks[player] > open_size:
                 expl['reasoning'] = f'Tier {tier}: open bet {config.OPEN_SIZE_BB}bb'
-                return Action(ActionType.BET, open_size, player), expl
+                return self._as_aggressive(ActionType.BET, open_size, state.stacks[player], state.to_call, player, actions), expl
             elif ActionType.CALL in actions:
                 expl['reasoning'] = f'Tier {tier}: call (no raise option)'
                 return Action(ActionType.CALL, state.to_call, player), expl
@@ -187,10 +200,10 @@ class AIv1(BaseAgent):
             if random.random() < config.TIER_B_RAISE_PROB:
                 if ActionType.RAISE in actions and state.stacks[player] > open_size:
                     expl['reasoning'] = 'Tier B: open raise (60% freq)'
-                    return Action(ActionType.RAISE, open_size, player), expl
+                    return self._as_aggressive(ActionType.RAISE, open_size, state.stacks[player], state.to_call, player, actions), expl
                 if ActionType.BET in actions and state.stacks[player] > open_size:
                     expl['reasoning'] = 'Tier B: open bet (60% freq)'
-                    return Action(ActionType.BET, open_size, player), expl
+                    return self._as_aggressive(ActionType.BET, open_size, state.stacks[player], state.to_call, player, actions), expl
             # Fall through to check/call
             if ActionType.CHECK in actions:
                 expl['reasoning'] = 'Tier B: check (40% no-raise)'
@@ -265,7 +278,7 @@ class AIv1(BaseAgent):
                 if raise_size >= state.min_raise:
                     expl['reasoning'] = f'raise: equity={equity:.2%} (large)'
                     expl['size_label'] = 'large'
-                    return Action(ActionType.RAISE, raise_size, player), expl
+                    return self._as_aggressive(ActionType.RAISE, raise_size, state.stacks[player], to_call, player, actions), expl
             # Call if break-even or better
             if equity >= odds - margin:
                 if ActionType.CALL in actions:
@@ -286,7 +299,7 @@ class AIv1(BaseAgent):
                 if ActionType.BET in actions and bet >= state.min_raise:
                     expl['reasoning'] = f'value_bet: equity={equity:.2%}'
                     expl['size_label'] = size_label
-                    return Action(ActionType.BET, bet, player), expl
+                    return self._as_aggressive(ActionType.BET, bet, state.stacks[player], 0.0, player, actions), expl
 
             elif equity >= 0.50:
                 # Thin value bet medium
@@ -296,7 +309,7 @@ class AIv1(BaseAgent):
                 if ActionType.BET in actions and bet >= state.min_raise:
                     expl['reasoning'] = f'thin_value_bet: equity={equity:.2%}'
                     expl['size_label'] = size_label
-                    return Action(ActionType.BET, bet, player), expl
+                    return self._as_aggressive(ActionType.BET, bet, state.stacks[player], 0.0, player, actions), expl
 
             elif 0.30 <= equity < 0.45:
                 # Semi-bluff with some frequency
@@ -307,7 +320,7 @@ class AIv1(BaseAgent):
                     if ActionType.BET in actions and bet >= state.min_raise:
                         expl['reasoning'] = f'semi_bluff: equity={equity:.2%}'
                         expl['size_label'] = size_label
-                        return Action(ActionType.BET, bet, player), expl
+                        return self._as_aggressive(ActionType.BET, bet, state.stacks[player], 0.0, player, actions), expl
 
             # Check everything else
             if ActionType.CHECK in actions:
