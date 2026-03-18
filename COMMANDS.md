@@ -3,7 +3,7 @@
 ## Kurulum
 
 ```bash
-pip install flask flask-socketio
+pip install flask flask-socketio pytest
 ```
 
 ---
@@ -43,6 +43,7 @@ python main.py sim [SEÇENEKLER]
 
 | Seçenek | Varsayılan | Açıklama |
 |---------|-----------|----------|
+| `--ai` | `v1` | AI sürümü: `v1` veya `v2` |
 | `--hands N` | 1000 | Simüle edilecek el sayısı |
 | `--opponent` | `simple` | Rakip: `simple` veya `random` |
 | `--mc-budget MS` | 50 | Monte Carlo zaman bütçesi (ms per karar) |
@@ -53,6 +54,9 @@ python main.py sim [SEÇENEKLER]
 ```bash
 # 1.000 el, Simple rakip, varsayılan MC (50ms)
 python main.py sim
+
+# AI v2 ile 10.000 el
+python main.py sim --ai v2 --hands 10000
 
 # 10.000 el, hızlı MC (20ms) → ~50 el/s, ~3 dakika
 python main.py sim --hands 10000 --mc-budget 20
@@ -150,6 +154,16 @@ Engine, evaluatör ve MC equity'yi hızlıca doğrular.
 
 ```bash
 python main.py test
+```
+
+---
+
+## Pytest Testleri
+
+AI v2 modülleri için ek testler (`tests/`) çalıştırmak:
+
+```bash
+python -m pytest -q
 ```
 
 Beklenen çıktı:

@@ -25,6 +25,7 @@ import config as cfg
 def cmd_sim(args):
     from app.engine.engine import GameEngine
     from app.agents.ai_v1 import AIv1
+    from app.agents.ai_v2.ai_v2 import AIV2Agent
     from app.agents.simple_agent import SimpleAgent
     from app.agents.random_agent import RandomAgent
     from app.agents.allin_agent import AllInAgent
@@ -39,7 +40,10 @@ def cmd_sim(args):
     cfg.MC_MAX_SAMPLES    = max(500, args.mc_budget * 20)
 
     engine = GameEngine(cfg.SB, cfg.BB)
-    ai = AIv1('AI v1', seat=0)
+    if args.ai == 'v2':
+        ai = AIV2Agent('AI v2', seat=0)
+    else:
+        ai = AIv1('AI v1', seat=0)
     if args.opponent == 'random':
         opp = RandomAgent('Random')
     elif args.opponent == 'allin':
@@ -161,6 +165,7 @@ def cmd_bench(args):
     """AI v1 vs Random + AI v1 vs Simple karşılaştırmalı benchmark."""
     from app.engine.engine import GameEngine
     from app.agents.ai_v1 import AIv1
+    from app.agents.ai_v2.ai_v2 import AIV2Agent
     from app.agents.simple_agent import SimpleAgent
     from app.agents.random_agent import RandomAgent
     from app.opponent_model.tracker import StatsTracker
@@ -178,7 +183,10 @@ def cmd_bench(args):
     results = {}
     for opp_name, OppClass in [('Random', RandomAgent), ('Simple', SimpleAgent)]:
         engine = GameEngine(cfg.SB, cfg.BB)
-        ai = AIv1('AI v1', seat=0)
+        if args.ai == 'v2':
+            ai = AIV2Agent('AI v2', seat=0)
+        else:
+            ai = AIv1('AI v1', seat=0)
         opp = OppClass(opp_name)
         tracker = StatsTracker()
         tracker.bb = cfg.BB
@@ -291,6 +299,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # sim
     p_sim = sub.add_parser('sim', help='Batch headless simülasyon')
+    p_sim.add_argument('--ai', choices=['v1', 'v2'], default='v1',
+                       help='Kullanılacak AI sürümü (default: v1)')
     p_sim.add_argument('--hands', type=int, default=1000, metavar='N',
                        help='Simüle edilecek el sayısı (default: 1000)')
     p_sim.add_argument('--opponent', choices=['simple', 'random', 'allin'], default='simple',
@@ -302,6 +312,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # bench
     p_bench = sub.add_parser('bench', help='AI v1 vs Random + Simple karşılaştırmalı benchmark')
+    p_bench.add_argument('--ai', choices=['v1', 'v2'], default='v1',
+                         help='Kullanılacak AI sürümü (default: v1)')
     p_bench.add_argument('--hands', type=int, default=5000, metavar='N',
                          help='Her senaryo için el sayısı (default: 5000)')
     p_bench.add_argument('--mc-budget', type=int, default=50, metavar='MS',

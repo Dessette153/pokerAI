@@ -21,6 +21,7 @@ import config as cfg
 from app.engine.engine import GameEngine
 from app.engine.state import StreetSnapshot
 from app.agents.ai_v1 import AIv1
+from app.agents.ai_v2.ai_v2 import AIV2Agent
 from app.agents.simple_agent import SimpleAgent
 from app.agents.random_agent import RandomAgent
 from app.agents.allin_agent import AllInAgent
@@ -222,16 +223,25 @@ def on_start_sim(data=None):
         emit('error', {'message': 'Simulation already running'})
         return
 
-    opponent_type = (data or {}).get('opponent', 'simple')
+    payload = (data or {})
+    opponent_type = payload.get('opponent', 'simple')
+    ai_version = payload.get('ai', 'v1')
 
     # Build engine and agents
     engine = GameEngine(sb=cfg.SB, bb=cfg.BB)
-    ai_agent = AIv1(name='AI v1', seat=0)
+    if ai_version == 'v2':
+        ai_agent = AIV2Agent(name='AI v2', seat=0)
+    else:
+        ai_agent = AIv1(name='AI v1', seat=0)
 
     if opponent_type == 'random':
         opp_agent = RandomAgent(name='Random')
     elif opponent_type == 'allin':
         opp_agent = AllInAgent(name='All-In')
+    elif opponent_type == 'ai_v1':
+        opp_agent = AIv1(name='AI v1 (Opp)')
+    elif opponent_type == 'ai_v2':
+        opp_agent = AIV2Agent(name='AI v2 (Opp)', seat=1)
     else:
         opp_agent = SimpleAgent(name='Simple')
 

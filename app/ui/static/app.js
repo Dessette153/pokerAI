@@ -190,17 +190,18 @@ function updateAIDecision(action) {
   const expl = action.explanation || {};
   const player = action.player;
 
-  if (player !== 0) return; // Only show AI v1 decisions
+  if (player !== 0) return; // Only show player 0 decisions
 
   const type = action.type;
   const amount = action.amount;
 
   $('ai-action').textContent = type.toUpperCase().replace('_', ' ') + (amount > 0 ? ` ${fmt(amount)}` : '');
   $('ai-action').style.color = {fold:'#ff8a8a',check:'#6dff6d',call:'#6ab4ff',bet:'#ffc940',raise:'#ff80e0',all_in:'#ff6600'}[type] || '#ccc';
-  $('ai-equity').textContent = expl.equity !== undefined ? `${(expl.equity * 100).toFixed(1)}%` : '-';
+  const equity = (expl.equity !== undefined) ? expl.equity : expl.equity_vs_range;
+  $('ai-equity').textContent = equity !== undefined ? `${(equity * 100).toFixed(1)}%` : '-';
   $('ai-potodds').textContent = expl.pot_odds !== undefined ? `${(expl.pot_odds * 100).toFixed(1)}%` : '-';
   $('ai-tier').textContent   = expl.tier || '-';
-  $('ai-reasoning').textContent = expl.reasoning || '-';
+  $('ai-reasoning').textContent = expl.reasoning || expl.reason || '-';
 }
 
 // ---- Street navigation ----
@@ -284,7 +285,8 @@ function revertToStreet(street) {
 
 btnStart.addEventListener('click', () => {
   const opponent = $('opponent-select').value;
-  socket.emit('start_sim', { opponent });
+  const ai = $('ai-select') ? $('ai-select').value : 'v1';
+  socket.emit('start_sim', { opponent, ai });
 });
 
 btnStop.addEventListener('click', () => {
