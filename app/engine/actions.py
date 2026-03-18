@@ -45,6 +45,7 @@ def legal_actions(state: 'GameState') -> List[ActionType]:
         return []
 
     player = state.to_act
+    opponent = 1 - player
     stack = state.stacks[player]
     to_call = state.to_call
     actions = []
@@ -54,21 +55,25 @@ def legal_actions(state: 'GameState') -> List[ActionType]:
         actions.append(ActionType.FOLD)
         # Can call (or go all-in for less)
         actions.append(ActionType.CALL)
-        # Can raise if player has chips beyond the call
-        if stack > to_call and not all(state.all_in):
-            actions.append(ActionType.RAISE)
-        # Can always go all-in if not already all-in
-        if stack > 0 and not state.all_in[player]:
-            actions.append(ActionType.ALL_IN)
+        # If opponent is already all-in, raising is not meaningful/allowed.
+        if not state.all_in[opponent] and not any(state.all_in):
+            # Can raise if player has chips beyond the call
+            if stack > to_call:
+                actions.append(ActionType.RAISE)
+            # Can go all-in (as a raise-all-in)
+            if stack > 0 and not state.all_in[player]:
+                actions.append(ActionType.ALL_IN)
     else:
         # No bet to face
         actions.append(ActionType.CHECK)
-        # Can bet if has chips
-        if stack > 0 and not all(state.all_in):
-            actions.append(ActionType.BET)
-        # Can always go all-in if not already all-in
-        if stack > 0 and not state.all_in[player]:
-            actions.append(ActionType.ALL_IN)
+        # If anyone is all-in, there is no betting.
+        if not any(state.all_in):
+            # Can bet if has chips
+            if stack > 0:
+                actions.append(ActionType.BET)
+            # Can go all-in if not already all-in
+            if stack > 0 and not state.all_in[player]:
+                actions.append(ActionType.ALL_IN)
 
     return actions
 

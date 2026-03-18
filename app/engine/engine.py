@@ -90,6 +90,9 @@ class GameEngine:
         player = s.to_act
         opponent = 1 - player
 
+        # Track call owed before this action (useful for sizing raises / all-ins)
+        call_owed_before = s.to_call
+
         action_dict = {
             'player': player,
             'type': action.type.value,
@@ -126,6 +129,9 @@ class GameEngine:
                     s.pot -= uncalled
                     s.street_invested[opponent] -= uncalled
                     s.total_invested[opponent] -= uncalled
+                    # If we refunded chips, the opponent is not actually all-in anymore.
+                    if s.stacks[opponent] > 0:
+                        s.all_in[opponent] = False
                     action_dict['uncalled_returned'] = uncalled
             s.voluntary_acted[player] = True
             action_dict['amount'] = call_amount
@@ -158,23 +164,30 @@ class GameEngine:
             action_dict['raise_size'] = actual_raise
 
         elif action.type == ActionType.ALL_IN:
-            # Player commits their entire remaining stack.
-            # This is either a raise-all-in (if more than to_call) or
-            # a call-all-in for less (if less than to_call).
-            all_in_amount = s.stacks[player]
-            s.stacks[player] = 0
+            # Player commits an all-in amount.
+            # Heads-up simplification: you cannot commit more chips than the
+            # opponent can cover. Cap the committed amount to:
+            #   max_put = to_call + opponent_remaining_stack
+            # This prevents "all-in" actions larger than the opponent's stack.
+            max_put = max(0.0, s.to_call + s.stacks[opponent])
+            all_in_amount = min(s.stacks[player], max_put)
+
+            s.stacks[player] -= all_in_amount
             s.pot += all_in_amount
             s.street_invested[player] += all_in_amount
             s.total_invested[player] += all_in_amount
-            s.all_in[player] = True
+            s.all_in[player] = (s.stacks[player] == 0)
 
             # net_to_call: how much opponent must still put in after this
             net_to_call = s.street_invested[player] - s.street_invested[opponent]
             if net_to_call > 0:
                 # Raise-all-in: opponent must respond
                 s.to_call = net_to_call
-                s.last_raise = all_in_amount
-                s.min_raise = all_in_amount
+                actual_raise = max(0.0, all_in_amount - call_owed_before)
+                s.last_raise = actual_raise
+                # Keep min_raise unchanged unless this is a bigger raise size.
+                if actual_raise > 0:
+                    s.min_raise = max(s.min_raise, actual_raise)
                 s.voluntary_acted[player] = True
                 s.voluntary_acted[opponent] = False
             else:
@@ -185,12 +198,15 @@ class GameEngine:
                     s.pot -= uncalled
                     s.street_invested[opponent] -= uncalled
                     s.total_invested[opponent] -= uncalled
+                    if s.stacks[opponent] > 0:
+                        s.all_in[opponent] = False
                     action_dict['uncalled_returned'] = uncalled
                 s.to_call = 0
                 s.voluntary_acted[player] = True
 
             action_dict['amount'] = all_in_amount
-            action_dict['all_in'] = True
+            if s.all_in[player]:
+                action_dict['all_in'] = True
 
         action_dict['pot_after'] = s.pot
         action_dict['stacks_after'] = list(s.stacks)
