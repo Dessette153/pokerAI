@@ -26,6 +26,7 @@ from app.agents.random_agent import RandomAgent
 from app.agents.allin_agent import AllInAgent
 from app.opponent_model.tracker import StatsTracker
 from app.logging.hand_logger import HandLogger
+from app.logging.deal_logger import DealLogger
 from app.sim.simulator import SessionSimulator, SimEvent
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -48,6 +49,7 @@ class SimState:
         self.simulator: Optional[SessionSimulator] = None
         self.tracker = StatsTracker()
         self.logger: Optional[HandLogger] = None
+        self.deal_logger: Optional[DealLogger] = None
         self.bg_thread: Optional[threading.Thread] = None
         self.lock = threading.Lock()
         self.agent_names = [cfg.SEAT_NAMES[0], cfg.SEAT_NAMES[1]]
@@ -127,6 +129,8 @@ def _simulation_loop():
                     sim_state.tracker.record_hand(result)
                     if sim_state.logger:
                         sim_state.logger.log_hand_result(result)
+                    if sim_state.deal_logger:
+                        sim_state.deal_logger.log_hand_result(result)
 
                     # Update simulator state
                     sim.record_result(result)
@@ -255,6 +259,10 @@ def on_start_sim(data=None):
     sim_state.logger = HandLogger()
     sim_state.logger.open()
 
+    # Start dealing logger (hole + per-street board deals)
+    sim_state.deal_logger = DealLogger()
+    sim_state.deal_logger.open()
+
     # Launch background thread
     sim_state.bg_thread = threading.Thread(target=_simulation_loop, daemon=True)
     sim_state.bg_thread.start()
@@ -271,6 +279,9 @@ def on_stop_sim():
     if sim_state.logger:
         sim_state.logger.close()
         sim_state.logger = None
+    if sim_state.deal_logger:
+        sim_state.deal_logger.close()
+        sim_state.deal_logger = None
     emit('sim_stopping', {})
 
 

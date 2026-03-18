@@ -268,10 +268,21 @@ class GameEngine:
         next_street = STREETS[idx + 1]
 
         # Deal board cards
+        dealt_cards: List[Card] = []
         if next_street == 'FLOP':
-            s.board.extend(deck.deal(3))
+            dealt_cards = deck.deal(3)
+            s.board.extend(dealt_cards)
         elif next_street in ('TURN', 'RIVER'):
-            s.board.extend(deck.deal(1))
+            dealt_cards = deck.deal(1)
+            s.board.extend(dealt_cards)
+
+        if dealt_cards:
+            s.action_history.append({
+                'type': 'deal_board',
+                'street': next_street,
+                'cards': [str(c) for c in dealt_cards],
+                'board_after': [str(c) for c in s.board],
+            })
 
         # Reset street state
         s.street = next_street
@@ -296,12 +307,24 @@ class GameEngine:
         while s.street != 'RIVER':
             idx = STREETS.index(s.street)
             s.street = STREETS[idx + 1]
+            dealt_cards: List[Card] = []
             if s.street == 'FLOP' and len(s.board) < 3:
-                s.board.extend(deck.deal(3 - len(s.board)))
+                dealt_cards = deck.deal(3 - len(s.board))
+                s.board.extend(dealt_cards)
             elif s.street == 'TURN' and len(s.board) < 4:
-                s.board.extend(deck.deal(4 - len(s.board)))
+                dealt_cards = deck.deal(4 - len(s.board))
+                s.board.extend(dealt_cards)
             elif s.street == 'RIVER' and len(s.board) < 5:
-                s.board.extend(deck.deal(5 - len(s.board)))
+                dealt_cards = deck.deal(5 - len(s.board))
+                s.board.extend(dealt_cards)
+
+            if dealt_cards:
+                s.action_history.append({
+                    'type': 'deal_board',
+                    'street': s.street,
+                    'cards': [str(c) for c in dealt_cards],
+                    'board_after': [str(c) for c in s.board],
+                })
         return self._resolve_showdown(s)
 
     def _resolve_showdown(self, s: GameState) -> GameState:

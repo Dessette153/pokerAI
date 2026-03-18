@@ -30,6 +30,7 @@ def cmd_sim(args):
     from app.agents.allin_agent import AllInAgent
     from app.opponent_model.tracker import StatsTracker
     from app.logging.hand_logger import HandLogger
+    from app.logging.deal_logger import DealLogger
     from app.sim.simulator import SessionSimulator, simulate_hand
 
     # Batch sim için MC bütçesini düşür (UI'de 900ms, CLI'de 50ms yeterli)
@@ -58,6 +59,7 @@ def cmd_sim(args):
     )
 
     logger = None
+    deal_logger = None
     if not args.no_log:
         import os; os.makedirs('logs', exist_ok=True)
         import datetime
@@ -65,6 +67,10 @@ def cmd_sim(args):
         log_path = f'logs/sim_{args.hands}hands_{ts}.jsonl'
         logger = HandLogger(log_path)
         logger.open()
+
+        deal_log_path = f'logs/deals_sim_{args.hands}hands_{ts}.ndjson'
+        deal_logger = DealLogger(deal_log_path)
+        deal_logger.open()
 
     total = args.hands
     start = time.time()
@@ -89,6 +95,8 @@ def cmd_sim(args):
         tracker.record_hand(result)
         if logger:
             logger.log_hand_result(result)
+        if deal_logger:
+            deal_logger.log_hand_result(result)
 
         if result.was_fold:
             folds += 1
@@ -114,6 +122,8 @@ def cmd_sim(args):
     elapsed = time.time() - start
     if logger:
         logger.close()
+    if deal_logger:
+        deal_logger.close()
 
     stats = tracker.to_dict()
     p0 = stats['player0']
@@ -138,6 +148,8 @@ def cmd_sim(args):
     print(f"    Showdown: {showdowns:,} ({showdowns/total*100:.1f}%)")
     if logger:
         print(f"\n  Log: {logger.log_path}")
+    if deal_logger:
+        print(f"  Deal log: {deal_logger.log_path}")
     print()
 
 
