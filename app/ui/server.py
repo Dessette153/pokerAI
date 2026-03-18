@@ -14,7 +14,7 @@ import threading
 import time
 from typing import Optional, List, Dict
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
 import config as cfg
@@ -29,6 +29,11 @@ from app.opponent_model.tracker import StatsTracker
 from app.logging.hand_logger import HandLogger
 from app.logging.deal_logger import DealLogger
 from app.sim.simulator import SessionSimulator, SimEvent
+from app.ui.public_state import state_to_public_dict
+from app.engine.actions import Action, ActionType
+from app.engine.actions import legal_actions
+from app.agents.web_human_agent import WebHumanAgent
+from app.agents.human_agent import validate_human_action
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config['SECRET_KEY'] = 'pokerai-secret'
@@ -42,6 +47,10 @@ class SimState:
     def __init__(self):
         self.running = False
         self.paused = False              # True when waiting at showdown
+        self.mode = 'sim'                # 'sim' | 'hero'
+        self.client_sid: Optional[str] = None
+        self.hero_seat: Optional[int] = None
+        self.human_agent: Optional[WebHumanAgent] = None
         self.stop_event = threading.Event()
         self.resume_event = threading.Event()
         self.next_event = threading.Event()  # for "next hand" from paused state
@@ -83,6 +92,16 @@ def _simulation_loop():
     """Main simulation loop running in a background thread."""
     sim = sim_state.simulator
 
+    # For hero mode we only emit to a single client.
+    target_sid = sim_state.client_sid if sim_state.mode == 'hero' else None
+    hero_seat = sim_state.hero_seat if sim_state.mode == 'hero' else None
+
+    def emit_to(event: str, payload: dict):
+        if target_sid:
+            socketio.emit(event, payload, to=target_sid)
+        else:
+            socketio.emit(event, payload)
+
     while not sim_state.stop_event.is_set():
         # Get the generator for the next hand
         gen = sim.next_hand_generator()
@@ -96,16 +115,24 @@ def _simulation_loop():
                     break
 
                 if event.type == 'hand_start':
-                    socketio.emit('hand_start', {
+                    st = (
+                        state_to_public_dict(event.state, hero_seat=hero_seat, reveal_all=False)
+                        if target_sid and hero_seat is not None else event.state.to_dict()
+                    )
+                    emit_to('hand_start', {
                         'hand_id': sim.current_hand_id,
-                        'state': event.state.to_dict(),
+                        'state': st,
                         'agent_names': sim_state.agent_names,
                     })
 
                 elif event.type == 'action':
-                    socketio.emit('game_state', {
+                    st = (
+                        state_to_public_dict(event.state, hero_seat=hero_seat, reveal_all=False)
+                        if target_sid and hero_seat is not None else event.state.to_dict()
+                    )
+                    emit_to('game_state', {
                         'hand_id': sim.current_hand_id,
-                        'state': event.state.to_dict(),
+                        'state': st,
                         'last_action': event.action,
                         'stats': sim_state.tracker.to_dict(),
                     })
@@ -114,10 +141,14 @@ def _simulation_loop():
 
                 elif event.type == 'street':
                     snapshots_this_hand = [_snapshot_to_dict(s) for s in event.snapshots]
-                    socketio.emit('street_change', {
+                    st = (
+                        state_to_public_dict(event.state, hero_seat=hero_seat, reveal_all=False)
+                        if target_sid and hero_seat is not None else event.state.to_dict()
+                    )
+                    emit_to('street_change', {
                         'hand_id': sim.current_hand_id,
                         'street': event.street,
-                        'state': event.state.to_dict(),
+                        'state': st,
                         'snapshots': snapshots_this_hand,
                     })
                     time.sleep(min(0.3, sim_state.action_delay * 1.5))
@@ -138,14 +169,18 @@ def _simulation_loop():
 
                     if event.was_fold:
                         # Fold: emit and briefly pause, then continue
-                        socketio.emit('hand_ended', {
+                        st = (
+                            state_to_public_dict(event.state, hero_seat=hero_seat, reveal_all=True)
+                            if target_sid and hero_seat is not None else event.state.to_dict(reveal_all=True)
+                        )
+                        emit_to('hand_ended', {
                             'hand_id': result.hand_id,
                             'was_fold': True,
                             'fold_by': result.fold_by,
                             'winner': result.winner,
                             'pot_won': result.pot_won,
                             'net_chips': result.net_chips,
-                            'state': event.state.to_dict(reveal_all=True),
+                            'state': st,
                             'snapshots': snapshots_this_hand,
                             'stats': sim_state.tracker.to_dict(),
                         })
@@ -158,13 +193,17 @@ def _simulation_loop():
                         sim_state.resume_event.clear()
                         sim_state.next_event.clear()
 
-                        socketio.emit('paused', {
+                        st = (
+                            state_to_public_dict(event.state, hero_seat=hero_seat, reveal_all=True)
+                            if target_sid and hero_seat is not None else event.state.to_dict(reveal_all=True)
+                        )
+                        emit_to('paused', {
                             'hand_id': result.hand_id,
                             'was_fold': False,
                             'winner': result.winner,
                             'pot_won': result.pot_won,
                             'net_chips': result.net_chips,
-                            'state': event.state.to_dict(reveal_all=True),
+                            'state': st,
                             'snapshots': snapshots_this_hand,
                             'stats': sim_state.tracker.to_dict(),
                         })
@@ -180,7 +219,7 @@ def _simulation_loop():
         except StopIteration:
             pass
         except Exception as e:
-            socketio.emit('error', {'message': str(e)})
+            emit_to('error', {'message': str(e)})
             import traceback
             traceback.print_exc()
 
@@ -188,7 +227,7 @@ def _simulation_loop():
             break
 
     sim_state.running = False
-    socketio.emit('sim_stopped', {})
+    emit_to('sim_stopped', {})
 
 
 # ------------------------------------------------------------------ #
@@ -261,6 +300,10 @@ def on_start_sim(data=None):
     sim_state.tracker.bb = cfg.BB
     sim_state.running = True
     sim_state.paused = False
+    sim_state.mode = 'sim'
+    sim_state.client_sid = None
+    sim_state.hero_seat = None
+    sim_state.human_agent = None
     sim_state.stop_event.clear()
     sim_state.resume_event.clear()
     sim_state.next_event.clear()
@@ -280,18 +323,160 @@ def on_start_sim(data=None):
     emit('sim_started', {'agent_names': sim_state.agent_names})
 
 
+@socketio.on('start_hero')
+def on_start_hero(data=None):
+    """Start an interactive Hero vs AI session for the connected client."""
+    if sim_state.running:
+        emit('error', {'message': 'Simulation already running'})
+        return
+
+    payload = (data or {})
+    hero_seat = int(payload.get('hero_seat', 0))
+    if hero_seat not in (0, 1):
+        emit('error', {'message': 'hero_seat must be 0 or 1'})
+        return
+    villain_kind = payload.get('villain', 'v2')
+
+    sid = request.sid
+
+    engine = GameEngine(sb=cfg.SB, bb=cfg.BB)
+
+    def prompt_fn(gs):
+        # Emit a dedicated prompt event so the browser can show action buttons.
+        pub = state_to_public_dict(gs, hero_seat=hero_seat, reveal_all=False)
+        la = [a.value for a in legal_actions(gs)]
+        socketio.emit('hero_turn', {
+            'hand_id': gs.hand_id,
+            'hero_seat': hero_seat,
+            'state': pub,
+            'legal_actions': la,
+        }, to=sid)
+
+    hero_agent = WebHumanAgent(name='Hero', seat=hero_seat, prompt_fn=prompt_fn)
+    villain_seat = 1 - hero_seat
+    if villain_kind == 'v2':
+        villain_agent = AIV2Agent(name='AI v2', seat=villain_seat)
+    elif villain_kind == 'v1':
+        villain_agent = AIv1(name='AI v1', seat=villain_seat)
+    elif villain_kind == 'simple':
+        villain_agent = SimpleAgent(name='Simple')
+    elif villain_kind == 'random':
+        villain_agent = RandomAgent(name='Random')
+    elif villain_kind == 'allin':
+        villain_agent = AllInAgent(name='All-In')
+    else:
+        emit('error', {'message': f'Unknown villain: {villain_kind}'})
+        return
+
+    agents = [None, None]
+    agents[hero_seat] = hero_agent
+    agents[villain_seat] = villain_agent
+
+    sim_state.agent_names = [
+        hero_agent.name if hero_seat == 0 else villain_agent.name,
+        hero_agent.name if hero_seat == 1 else villain_agent.name,
+    ]
+
+    simulator = SessionSimulator(
+        engine=engine,
+        agents=agents,
+        starting_stacks=[cfg.STARTING_STACK, cfg.STARTING_STACK],
+        rebuy_to=cfg.STARTING_STACK,
+        rebuy_both=True,
+    )
+
+    sim_state.simulator = simulator
+    sim_state.tracker = StatsTracker()
+    sim_state.tracker.bb = cfg.BB
+    sim_state.running = True
+    sim_state.paused = False
+    sim_state.mode = 'hero'
+    sim_state.client_sid = sid
+    sim_state.hero_seat = hero_seat
+    sim_state.human_agent = hero_agent
+    sim_state.stop_event.clear()
+    sim_state.resume_event.clear()
+    sim_state.next_event.clear()
+
+    sim_state.logger = HandLogger()
+    sim_state.logger.open()
+    sim_state.deal_logger = DealLogger()
+    sim_state.deal_logger.open()
+
+    sim_state.bg_thread = threading.Thread(target=_simulation_loop, daemon=True)
+    sim_state.bg_thread.start()
+
+    emit('sim_started', {'agent_names': sim_state.agent_names})
+
+
+@socketio.on('hero_action')
+def on_hero_action(data):
+    """Receive a hero action from the browser and unblock WebHumanAgent."""
+    if not sim_state.running or sim_state.mode != 'hero' or sim_state.human_agent is None:
+        emit('hero_action_error', {'message': 'No hero session running'})
+        return
+
+    if request.sid != sim_state.client_sid:
+        emit('hero_action_error', {'message': 'This session belongs to another client'})
+        return
+
+    agent = sim_state.human_agent
+    if not agent.waiting_for_action:
+        emit('hero_action_error', {'message': 'Not currently waiting for an action'})
+        return
+
+    pending_state = agent.pending_state
+    if pending_state is None:
+        emit('hero_action_error', {'message': 'No pending state'})
+        return
+
+    try:
+        t = (data or {}).get('type')
+        if not t:
+            raise ValueError('Missing action type')
+        t = str(t).lower().replace('-', '_')
+        at = ActionType(t)
+        amt = float((data or {}).get('amount') or 0.0)
+        action = Action(type=at, amount=amt)
+        validate_human_action(action, pending_state)
+    except Exception as e:
+        emit('hero_action_error', {'message': str(e)})
+        return
+
+    agent.set_action(action)
+    emit('hero_action_ok', {})
+
+
 @socketio.on('stop_sim')
 def on_stop_sim():
     """Stop the simulation."""
     sim_state.stop_event.set()
     sim_state.resume_event.set()   # unblock any waiting
     sim_state.next_event.set()
+    # Unblock any pending hero action wait
+    if sim_state.human_agent is not None:
+        try:
+            ps = sim_state.human_agent.pending_state
+            if ps is not None:
+                la = legal_actions(ps)
+                if ActionType.CHECK in la:
+                    sim_state.human_agent.set_action(Action(ActionType.CHECK))
+                elif ActionType.CALL in la:
+                    sim_state.human_agent.set_action(Action(ActionType.CALL))
+                elif ActionType.FOLD in la:
+                    sim_state.human_agent.set_action(Action(ActionType.FOLD))
+        except Exception:
+            pass
     if sim_state.logger:
         sim_state.logger.close()
         sim_state.logger = None
     if sim_state.deal_logger:
         sim_state.deal_logger.close()
         sim_state.deal_logger = None
+    sim_state.mode = 'sim'
+    sim_state.client_sid = None
+    sim_state.hero_seat = None
+    sim_state.human_agent = None
     emit('sim_stopping', {})
 
 

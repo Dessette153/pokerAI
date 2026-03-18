@@ -17,6 +17,11 @@
       <span id="sim-status" class="status-idle">● IDLE</span>
     </div>
     <div class="header-right">
+      <select id="mode-select" title="Çalışma modu">
+        <option value="sim" selected>Mode: Sim</option>
+        <option value="hero">Mode: Hero vs AI</option>
+      </select>
+
       <select id="ai-select">
         <option value="v1">AI: v1</option>
         <option value="v2">AI: v2</option>
@@ -27,6 +32,19 @@
         <option value="allin">Opponent: All-In</option>
         <option value="ai_v1">Opponent: AI v1</option>
         <option value="ai_v2">Opponent: AI v2</option>
+      </select>
+
+      <select id="hero-seat-select" style="display:none" title="Hero seat">
+        <option value="0" selected>Hero seat: P0</option>
+        <option value="1">Hero seat: P1</option>
+      </select>
+
+      <select id="villain-select" style="display:none" title="Rakip">
+        <option value="v2" selected>Villain: AI v2</option>
+        <option value="v1">Villain: AI v1</option>
+        <option value="simple">Villain: Simple</option>
+        <option value="random">Villain: Random</option>
+        <option value="allin">Villain: All-In</option>
       </select>
       <label class="checkbox-label" title="Showdown'larda simülasyonu durdur">
         <input type="checkbox" id="chk-pause" checked>
@@ -144,6 +162,23 @@
 
       <!-- Controls bar -->
       <div class="controls-bar">
+        <!-- Hero action controls (shown on hero turn) -->
+        <div id="hero-controls" class="hero-controls" style="display:none">
+          <div class="hero-title">Your Turn</div>
+          <div class="hero-actions">
+            <button id="btn-hero-fold" class="btn btn-red">Fold</button>
+            <button id="btn-hero-check" class="btn btn-blue">Check</button>
+            <button id="btn-hero-call" class="btn btn-blue">Call</button>
+            <button id="btn-hero-allin" class="btn btn-red">All-In</button>
+          </div>
+          <div class="hero-sizer">
+            <input id="hero-amount" class="hero-amount" type="number" min="0" step="1" placeholder="Amount">
+            <button id="btn-hero-bet" class="btn btn-green">Bet</button>
+            <button id="btn-hero-raise" class="btn btn-green">Raise</button>
+          </div>
+          <div id="hero-error" class="hero-error"></div>
+        </div>
+
         <!-- Street navigation (shown when paused) -->
         <div id="street-nav" class="street-nav" style="display:none">
           <button class="btn btn-street" data-street="PREFLOP" onclick="revertToStreet('PREFLOP')">PREFLOP</button>

@@ -11,6 +11,8 @@ let isPaused   = false;
 let currentSnapshots = [];
 let agentNames = ['AI v1', 'Opponent'];
 let visitedStreets = new Set();
+let uiMode = 'sim';
+let heroSeat = 0;
 
 // ---- DOM refs ----
 const $ = id => document.getElementById(id);
@@ -25,6 +27,23 @@ const potAmount   = $('pot-amount');
 const curStreet   = $('cur-street');
 const curPot      = $('cur-pot');
 const curTocall   = $('cur-tocall');
+
+// Hero controls
+const modeSelect = $('mode-select');
+const aiSelect = $('ai-select');
+const opponentSelect = $('opponent-select');
+const heroSeatSelect = $('hero-seat-select');
+const villainSelect = $('villain-select');
+
+const heroControls = $('hero-controls');
+const heroError = $('hero-error');
+const heroAmount = $('hero-amount');
+const btnHeroFold = $('btn-hero-fold');
+const btnHeroCheck = $('btn-hero-check');
+const btnHeroCall = $('btn-hero-call');
+const btnHeroBet = $('btn-hero-bet');
+const btnHeroRaise = $('btn-hero-raise');
+const btnHeroAllin = $('btn-hero-allin');
 
 // ---- Helpers ----
 
@@ -190,7 +209,12 @@ function updateAIDecision(action) {
   const expl = action.explanation || {};
   const player = action.player;
 
-  if (player !== 0) return; // Only show player 0 decisions
+  // In sim mode we show player 0 decisions. In hero mode, show non-hero seat decisions.
+  if (uiMode === 'hero') {
+    if (player === heroSeat) return;
+  } else {
+    if (player !== 0) return;
+  }
 
   const type = action.type;
   const amount = action.amount;
@@ -202,6 +226,81 @@ function updateAIDecision(action) {
   $('ai-potodds').textContent = expl.pot_odds !== undefined ? `${(expl.pot_odds * 100).toFixed(1)}%` : '-';
   $('ai-tier').textContent   = expl.tier || '-';
   $('ai-reasoning').textContent = expl.reasoning || expl.reason || '-';
+}
+
+function setMode(mode) {
+  uiMode = mode;
+  const isHero = (mode === 'hero');
+  // Toggle config selects
+  aiSelect.style.display = isHero ? 'none' : 'inline-block';
+  opponentSelect.style.display = isHero ? 'none' : 'inline-block';
+  heroSeatSelect.style.display = isHero ? 'inline-block' : 'none';
+  villainSelect.style.display = isHero ? 'inline-block' : 'none';
+  // Hide hero controls until prompted
+  heroControls.style.display = 'none';
+  heroError.textContent = '';
+}
+
+function setHeroControlsEnabled(enabled) {
+  [btnHeroFold, btnHeroCheck, btnHeroCall, btnHeroBet, btnHeroRaise, btnHeroAllin, heroAmount]
+    .forEach(el => { if (el) el.disabled = !enabled; });
+}
+
+function showHeroError(msg) {
+  heroError.textContent = msg || '';
+}
+
+function normalizeLegal(legalActions) {
+  const s = new Set();
+  (legalActions || []).forEach(a => s.add(String(a)));
+  return s;
+}
+
+function updateHeroControlsFromPrompt(prompt) {
+  if (!prompt || !prompt.state) return;
+  heroSeat = prompt.hero_seat ?? heroSeat;
+  const st = prompt.state;
+  const legal = normalizeLegal(prompt.legal_actions);
+
+  // Update call/check labels with amounts when relevant
+  const toCall = st.to_call ?? 0;
+  const minRaise = st.min_raise ?? 0;
+
+  btnHeroFold.style.display = legal.has('fold') ? 'inline-block' : 'none';
+  btnHeroCheck.style.display = legal.has('check') ? 'inline-block' : 'none';
+  btnHeroCall.style.display = legal.has('call') ? 'inline-block' : 'none';
+  btnHeroAllin.style.display = legal.has('all_in') ? 'inline-block' : 'none';
+
+  btnHeroCall.textContent = toCall > 0 ? `Call ${fmt(toCall)}` : 'Call';
+  btnHeroCheck.textContent = 'Check';
+
+  const canBet = legal.has('bet');
+  const canRaise = legal.has('raise');
+  btnHeroBet.style.display = canBet ? 'inline-block' : 'none';
+  btnHeroRaise.style.display = canRaise ? 'inline-block' : 'none';
+
+  heroAmount.style.display = (canBet || canRaise) ? 'inline-block' : 'none';
+  heroAmount.placeholder = (canRaise ? `Raise (min ${fmt(minRaise)})` : `Bet (min ${fmt(minRaise)})`);
+
+  showHeroError('');
+  setHeroControlsEnabled(true);
+  heroControls.style.display = 'flex';
+}
+
+function sendHeroAction(type) {
+  const payload = { type };
+  if (type === 'bet' || type === 'raise') {
+    const v = heroAmount.value;
+    if (!v) {
+      showHeroError('Amount required for bet/raise');
+      return;
+    }
+    payload.amount = parseFloat(v);
+  }
+
+  setHeroControlsEnabled(false);
+  showHeroError('');
+  socket.emit('hero_action', payload);
 }
 
 // ---- Street navigation ----
@@ -284,9 +383,16 @@ function revertToStreet(street) {
 // ---- Button handlers ----
 
 btnStart.addEventListener('click', () => {
-  const opponent = $('opponent-select').value;
-  const ai = $('ai-select') ? $('ai-select').value : 'v1';
-  socket.emit('start_sim', { opponent, ai });
+  const mode = modeSelect.value || 'sim';
+  if (mode === 'hero') {
+    const hs = parseInt(heroSeatSelect.value);
+    const villain = villainSelect.value;
+    socket.emit('start_hero', { hero_seat: hs, villain });
+  } else {
+    const opponent = opponentSelect.value;
+    const ai = aiSelect ? aiSelect.value : 'v1';
+    socket.emit('start_sim', { opponent, ai });
+  }
 });
 
 btnStop.addEventListener('click', () => {
@@ -327,6 +433,25 @@ socket.on('sim_started', data => {
   clearLog();
   setStatus('● RUNNING', 'running');
   addLog('Simulation started', 'info');
+});
+
+socket.on('hero_turn', data => {
+  // Server prompts for user action.
+  setMode('hero');
+  updateHeroControlsFromPrompt(data);
+  // Render state snapshot as the authoritative view
+  renderGameState(data.state);
+  addLog('Your turn', 'info');
+});
+
+socket.on('hero_action_ok', _data => {
+  // Wait for the following game_state update.
+  heroControls.style.display = 'none';
+});
+
+socket.on('hero_action_error', data => {
+  setHeroControlsEnabled(true);
+  showHeroError(data && data.message ? data.message : 'Invalid action');
 });
 
 socket.on('sim_stopped', data => {
@@ -451,3 +576,19 @@ socket.on('error', data => {
 socket.on('resuming', data => {
   setStatus('● RUNNING', 'running');
 });
+
+// ---- Mode toggle ----
+modeSelect.addEventListener('change', () => {
+  setMode(modeSelect.value || 'sim');
+});
+
+// ---- Hero button handlers ----
+btnHeroFold.addEventListener('click', () => sendHeroAction('fold'));
+btnHeroCheck.addEventListener('click', () => sendHeroAction('check'));
+btnHeroCall.addEventListener('click', () => sendHeroAction('call'));
+btnHeroAllin.addEventListener('click', () => sendHeroAction('all_in'));
+btnHeroBet.addEventListener('click', () => sendHeroAction('bet'));
+btnHeroRaise.addEventListener('click', () => sendHeroAction('raise'));
+
+// Init default mode
+setMode(modeSelect.value || 'sim');

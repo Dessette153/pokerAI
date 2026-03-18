@@ -280,6 +280,119 @@ def cmd_ui(args):
 
 
 # ------------------------------------------------------------------ #
+# Subcommand: hero-vs-ai
+# ------------------------------------------------------------------ #
+
+def cmd_hero_vs_ai(args):
+    """Interactive CLI: Human (hero) vs selected AI opponent."""
+    from app.engine.engine import GameEngine
+    from app.sim.simulator import SessionSimulator
+    from app.agents.human_agent import HumanAgent
+    from app.agents.ai_v1 import AIv1
+    from app.agents.ai_v2.ai_v2 import AIV2Agent
+    from app.agents.simple_agent import SimpleAgent
+    from app.agents.random_agent import RandomAgent
+    from app.agents.allin_agent import AllInAgent
+
+    # Keep MC budgets consistent with other CLI modes when requested.
+    if args.mc_budget is not None:
+        cfg.MC_TIME_BUDGET_MS = args.mc_budget
+        cfg.MC_MIN_SAMPLES = max(100, args.mc_budget * 2)
+        cfg.MC_MAX_SAMPLES = max(500, args.mc_budget * 20)
+
+    engine = GameEngine(cfg.SB, cfg.BB)
+
+    hero_seat = args.hero_seat
+    villain_seat = 1 - hero_seat
+
+    hero = HumanAgent(name=args.hero_name, seat=hero_seat)
+
+    villain_kind = args.villain
+    if villain_kind == 'v1':
+        villain = AIv1(name='AI v1', seat=villain_seat)
+    elif villain_kind == 'v2':
+        villain = AIV2Agent(name='AI v2', seat=villain_seat)
+    elif villain_kind == 'simple':
+        villain = SimpleAgent(name='Simple')
+    elif villain_kind == 'random':
+        villain = RandomAgent(name='Random')
+    elif villain_kind == 'allin':
+        villain = AllInAgent(name='All-In')
+    else:
+        raise ValueError(f"Unknown villain type: {villain_kind}")
+
+    agents = [None, None]
+    agents[hero_seat] = hero
+    agents[villain_seat] = villain
+
+    sim = SessionSimulator(
+        engine=engine,
+        agents=agents,
+        starting_stacks=[args.starting_stack, args.starting_stack],
+        rebuy_to=(args.starting_stack if args.rebuy else None),
+        rebuy_both=True,
+    )
+
+    total_hands = args.hands
+    print(f"\n{'='*55}")
+    print("  Poker AI - Hero vs AI (CLI)")
+    print(f"  Hero seat: P{hero_seat} ({hero.name})")
+    print(f"  Villain  : P{villain_seat} ({villain.name})")
+    print(f"  Blinds   : {cfg.SB}/{cfg.BB} | Stack: {args.starting_stack:,}")
+    print("  Quit     : Ctrl+C")
+    print(f"{'='*55}\n")
+
+    try:
+        for _ in range(total_hands):
+            gen = sim.next_hand_generator()
+            result = None
+            for ev in gen:
+                if ev.type == 'action' and ev.action:
+                    # Print a compact feed for non-hero actions.
+                    p = ev.action.get('player')
+                    t = ev.action.get('type')
+                    amt = ev.action.get('amount', 0.0)
+                    if p != hero_seat:
+                        if t in ('bet', 'raise', 'call', 'all_in'):
+                            print(f"P{p} {t} {amt:.0f}")
+                        else:
+                            print(f"P{p} {t}")
+                elif ev.type == 'street':
+                    print(f"\n--- {ev.street} ---")
+                elif ev.type == 'hand_end':
+                    result = ev.result
+
+            sim.record_result(result)
+
+            final = result.final_state
+            print("\nHand complete.")
+            if result.was_fold:
+                print(f"Winner: P{result.winner} (fold)")
+            else:
+                # Show showdown info (engine includes hole cards at showdown only).
+                showdown = None
+                for a in reversed(final.action_history):
+                    if a.get('type') == 'showdown':
+                        showdown = a
+                        break
+                if showdown:
+                    hc = showdown.get('hole_cards')
+                    board = ' '.join(showdown.get('board') or [])
+                    if hc:
+                        print(f"Board: {board}")
+                        print(f"P0: {' '.join(hc[0])}")
+                        print(f"P1: {' '.join(hc[1])}")
+                if result.winner == -1:
+                    print("Result: split pot")
+                else:
+                    print(f"Winner: P{result.winner}")
+            print(f"Stacks: P0={final.stacks[0]:.0f}  P1={final.stacks[1]:.0f}\n")
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
+
+# ------------------------------------------------------------------ #
 # Argument parser
 # ------------------------------------------------------------------ #
 
@@ -322,6 +435,23 @@ def build_parser() -> argparse.ArgumentParser:
     # ui
     sub.add_parser('ui', help='Web UI başlat (http://localhost:5000)')
 
+    # hero-vs-ai
+    p_hero = sub.add_parser('hero-vs-ai', help='İnteraktif: Hero (insan) vs AI (CLI)')
+    p_hero.add_argument('--hero-seat', type=int, choices=[0, 1], default=0,
+                        help='Hero seat (0 veya 1) (default: 0)')
+    p_hero.add_argument('--hero-name', type=str, default='Hero',
+                        help='Hero adı (default: Hero)')
+    p_hero.add_argument('--villain', choices=['v1', 'v2', 'simple', 'random', 'allin'], default='v2',
+                        help='Rakip ajan tipi (default: v2)')
+    p_hero.add_argument('--hands', type=int, default=1, metavar='N',
+                        help='Oynanacak el sayısı (default: 1)')
+    p_hero.add_argument('--starting-stack', type=float, default=cfg.STARTING_STACK,
+                        help='Başlangıç stack (default: config.STARTING_STACK)')
+    p_hero.add_argument('--rebuy', action='store_true',
+                        help='Stack çok düşünce otomatik rebuy (BBe göre)')
+    p_hero.add_argument('--mc-budget', type=int, default=None, metavar='MS',
+                        help='MC zaman bütçesi ms (opsiyonel)')
+
     # test
     sub.add_parser('test', help='Engine / evaluator smoke test')
 
@@ -340,5 +470,7 @@ if __name__ == '__main__':
         cmd_ui(args)
     elif args.command == 'test':
         cmd_test(args)
+    elif args.command == 'hero-vs-ai':
+        cmd_hero_vs_ai(args)
     else:
         parser.print_help()
